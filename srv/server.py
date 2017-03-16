@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
+import importlib
+
 import cherrypy
 import logging
 import os
 
+import sys
 from atsrv.attestation_service import JWSProducer
 from atsrv.srv import AttestationService
 from oic.utils.keyio import build_keyjar
@@ -18,12 +21,6 @@ logger.addHandler(hdlr)
 logger.setLevel(logging.DEBUG)
 
 
-SERVER_KEY = 'certs/key.pem'
-SERVER_CERT = 'certs/cert.pem'
-CA_BUNDLE = None
-HOST = 'http://localhost'
-KEY_DEF = [{"type": "RSA", "key": "atsrv_sig", "use": ["sig"]}]
-
 if __name__ == '__main__':
     import argparse
 
@@ -31,14 +28,17 @@ if __name__ == '__main__':
     parser.add_argument('-p', dest='port', default=80, type=int)
     parser.add_argument('-t', dest='tls', action='store_true')
     parser.add_argument('-f', dest='fdir', required=True)
+    parser.add_argument(dest="config")
     args = parser.parse_args()
 
     folder = os.path.abspath(os.curdir)
+    sys.path.insert(0, ".")
+    conf = importlib.import_module(args.config)
 
     if args.port:
-        _host = "{}:{}".format(HOST, args.port)
+        _host = "{}:{}".format(conf.HOST, args.port)
     else:
-        _host = HOST
+        _host = conf.HOST
 
     cherrypy.config.update(
         {'environment': 'production',
@@ -65,7 +65,7 @@ if __name__ == '__main__':
             'cors.expose_public.on': True
         }}
 
-    _kj = build_keyjar(KEY_DEF)[1]
+    _kj = build_keyjar(conf.KEY_DEF)[1]
     value_conv = JWSProducer(_host, sign_keys=_kj, sign_alg="RS256")
 
     cherrypy.tree.mount(AttestationService(args.fdir, value_conv), '/',
@@ -73,10 +73,10 @@ if __name__ == '__main__':
 
     # If HTTPS
     if args.tls:
-        cherrypy.server.ssl_certificate = SERVER_CERT
-        cherrypy.server.ssl_private_key = SERVER_KEY
-        if CA_BUNDLE:
-            cherrypy.server.ssl_certificate_chain = CA_BUNDLE
+        cherrypy.server.ssl_certificate = conf.SERVER_CERT
+        cherrypy.server.ssl_private_key = conf.SERVER_KEY
+        if conf.CA_BUNDLE:
+            cherrypy.server.ssl_certificate_chain = conf.CA_BUNDLE
 
     cherrypy.engine.start()
     cherrypy.engine.block()
